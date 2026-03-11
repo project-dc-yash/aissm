@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hybrid Energy Monitor | Solar & Wind | DC Tech Core</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f3f5;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 950px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        h2 { color: #2c3e50; margin-bottom: 5px; }
+        #datetime { color: #7f8c8d; margin-bottom: 25px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .input-section {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+        }
+
+        .solar-header { color: #f39c12; border-bottom: 2px solid #f39c12; padding-bottom: 5px; margin-top: 0; }
+        .wind-header { color: #3498db; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-top: 0; }
+
+        .input-group { margin: 15px 0; }
+        label { display: block; font-size: 0.8rem; font-weight: bold; color: #64748b; margin-bottom: 5px; }
+        
+        input {
+            padding: 10px;
+            width: 90%;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .total-display {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .total-card h4 { margin: 0; font-size: 0.7rem; text-transform: uppercase; color: #bdc3c7; }
+        .total-card p { margin: 5px 0 0; font-size: 1.3rem; font-weight: bold; }
+
+        .btn-save { background: #27ae60; color: white; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-save:hover { background: #2ecc71; }
+
+        .table-container { max-height: 400px; overflow-y: auto; margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1e293b; color: white; padding: 12px; position: sticky; top: 0; }
+        td { border-bottom: 1px solid #f1f5f9; padding: 10px; }
+        .highlight-today { background: #f0fdf4 !important; font-weight: bold; }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Hybrid Energy Monitor (Solar + Wind)</h2>
+    <h3 id="datetime">Loading...</h3>
+
+    <div class="dashboard-grid">
+        <div class="input-section">
+            <h3 class="solar-header">☀️ Solar Panel (12V 100mA)</h3>
+            <div class="input-group">
+                <label>Solar Voltage (V)</label>
+                <input type="number" id="s_volt" value="12" oninput="calculate()">
+            </div>
+            <div class="input-group">
+                <label>Solar Current (mA)</label>
+                <input type="number" id="s_curr" value="100" oninput="calculate()">
+            </div>
+            <p style="font-size: 0.9rem;">Solar Power: <b id="s_power">1.20</b> W</p>
+        </div>
+
+        <div class="input-section">
+            <h3 class="wind-header">🌀 Wind Turbine (DC 55)</h3>
+            <div class="input-group">
+                <label>Wind Voltage (V)</label>
+                <input type="number" id="w_volt" value="12" oninput="calculate()">
+            </div>
+            <div class="input-group">
+                <label>Wind Current (A)</label>
+                <input type="number" id="w_curr" value="0.5" oninput="calculate()">
+            </div>
+            <p style="font-size: 0.9rem;">Wind Power: <b id="w_power">6.00</b> W</p>
+        </div>
+    </div>
+
+    <div class="total-display">
+        <div class="total-card"><h4>Total Power</h4><p id="t_power">0.00 W</p></div>
+        <div class="total-card"><h4>System Load</h4><p id="t_kw">0.00 kW</p></div>
+        <div class="total-card"><h4>Units (kWh)</h4><p id="t_unit">0.00</p></div>
+        <div class="total-card"><h4>Estimated Bill</h4><p id="t_price">₹0.00</p></div>
+    </div>
+
+    <button class="btn-save" onclick="saveData()">Save Today's Generation</button>
+
+    <h3>Generation History (Last 30 Days)</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Solar (W)</th>
+                    <th>Wind (W)</th>
+                    <th>Total kWh</th>
+                    <th>Price (₹)</th>
+                </tr>
+            </thead>
+            <tbody id="dataTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const UNIT_RATE = 9;
+
+    function showTime() {
+        const now = new Date();
+        const options = { day: '2-digit', month: '2-digit', year: '2-digit' };
+        document.getElementById("datetime").innerHTML = 
+            `Date: ${now.toLocaleDateString('en-GB', options)} | Time: ${now.toLocaleTimeString()}`;
+    }
+    setInterval(showTime, 1000);
+
+    function calculate() {
+        // Solar Calculation (mA to A: divide by 1000)
+        let sv = parseFloat(document.getElementById("s_volt").value) || 0;
+        let sc = parseFloat(document.getElementById("s_curr").value) || 0;
+        let s_pwr = sv * (sc / 1000);
+        document.getElementById("s_power").innerText = s_pwr.toFixed(2);
+
+        // Wind Calculation
+        let wv = parseFloat(document.getElementById("w_volt").value) || 0;
+        let wc = parseFloat(document.getElementById("w_curr").value) || 0;
+        let w_pwr = wv * wc;
+        document.getElementById("w_power").innerText = w_pwr.toFixed(2);
+
+        // Totals
+        let totalW = s_pwr + w_pwr;
+        let unit = (totalW / 1000).toFixed(4); // 1 hour usage
+        let price = (unit * UNIT_RATE).toFixed(2);
+
+        document.getElementById("t_power").innerText = totalW.toFixed(2) + " W";
+        document.getElementById("t_kw").innerText = (totalW / 1000).toFixed(3) + " kW";
+        document.getElementById("t_unit").innerText = unit;
+        document.getElementById("t_price").innerText = "₹" + price;
+        
+        return { s_pwr, w_pwr, unit, price };
+    }
+
+    function initializeHistory() {
+        let history = [];
+        const today = new Date();
+        for (let i = 0; i < 30; i++) {
+            let pastDate = new Date();
+            pastDate.setDate(today.getDate() - i);
+            let s = (Math.random() * 1.2).toFixed(2);
+            let w = (Math.random() * 6).toFixed(2);
+            let u = ((parseFloat(s) + parseFloat(w)) / 10).toFixed(2); // simulated units
+            history.push({
+                date: pastDate.toLocaleDateString('en-GB'),
+                solar: s,
+                wind: w,
+                unit: u,
+                price: (u * UNIT_RATE).toFixed(2)
+            });
+        }
+        localStorage.setItem('hybridHistory', JSON.stringify(history));
+    }
+
+    function saveData() {
+        let vals = calculate();
+        let now = new Date();
+        let dateStr = now.toLocaleDateString('en-GB');
+
+        let history = JSON.parse(localStorage.getItem('hybridHistory')) || [];
+        history.unshift({
+            date: dateStr,
+            solar: vals.s_pwr.toFixed(2),
+            wind: vals.w_pwr.toFixed(2),
+            unit: vals.unit,
+            price: vals.price
+        });
+
+        if (history.length > 30) history.pop();
+        localStorage.setItem('hybridHistory', JSON.stringify(history));
+        renderTable();
+        alert("Hybrid Data Saved Successfully!");
+    }
+
+    function renderTable() {
+        let history = JSON.parse(localStorage.getItem('hybridHistory'));
+        if (!history) {
+            initializeHistory();
+            history = JSON.parse(localStorage.getItem('hybridHistory'));
+        }
+
+        const tableBody = document.getElementById("dataTable");
+        const todayStr = new Date().toLocaleDateString('en-GB');
+        tableBody.innerHTML = ""; 
+
+        history.forEach(item => {
+            const row = tableBody.insertRow();
+            if(item.date === todayStr) row.className = "highlight-today";
+            row.insertCell(0).innerText = item.date;
+            row.insertCell(1).innerText = item.solar + " W";
+            row.insertCell(2).innerText = item.wind + " W";
+            row.insertCell(3).innerText = item.unit;
+            row.insertCell(4).innerText = "₹" + item.price;
+        });
+    }
+
+    window.onload = () => {
+        showTime();
+        calculate();
+        renderTable();
+    };
+</script>
+
+</body>
+</html>
